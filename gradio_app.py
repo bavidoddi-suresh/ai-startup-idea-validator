@@ -29,10 +29,9 @@ async def run_agent(message: str, api_key: str):
     """Run the ADK agent pipeline and yield text chunks."""
     if not api_key or not api_key.strip():
         yield (
-            "⚠️ **Please enter your Google AI Studio API key** in the "
+            "Please enter your Google AI Studio API key in the "
             "field above before chatting.\n\n"
-            "Get a free key at: "
-            "[aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)"
+            "Get a free key at: https://aistudio.google.com/app/apikey"
         )
         return
 
@@ -70,7 +69,7 @@ async def run_agent(message: str, api_key: str):
                 and event.author != current_agent
             ):
                 current_agent = event.author
-                full_response += f"\n\n---\n**🔄 {current_agent}**\n\n"
+                full_response += f"\n\n---\n**{current_agent}**\n\n"
                 yield full_response
 
             if event.content and event.content.parts:
@@ -84,58 +83,55 @@ async def run_agent(message: str, api_key: str):
         logger.error(f"Agent error: {error_msg}")
         logger.error(traceback.format_exc())
         if "api_key" in error_msg.lower() or "missing key" in error_msg.lower():
-            yield (
-                full_response
-                + "\n\n❌ **Invalid API Key.** Please check your key and try again."
-            )
+            yield full_response + "\n\nInvalid API Key. Please check and try again."
         else:
-            yield full_response + f"\n\n❌ **Error:** {error_msg}"
+            yield full_response + f"\n\nError: {error_msg}"
         return
 
     if not full_response.strip():
-        yield "✅ Pipeline completed."
+        yield "Pipeline completed."
 
 
 def add_user_message(message, history):
     """Add the user's message to chat history and clear the input box."""
     if not message or not message.strip():
         return "", history
-    history = history + [{"role": "user", "content": message}]
+    history = history + [[message, None]]
     return "", history
 
 
 async def generate_response(history, key):
     """Stream the bot's response into the chat."""
-    if not history:
+    if not history or history[-1][1] is not None:
         yield history
         return
 
-    user_msg = history[-1]["content"]
-    history = history + [{"role": "assistant", "content": "⏳ Starting analysis..."}]
+    user_msg = history[-1][0]
+    history[-1][1] = "Starting analysis..."
     yield history
 
     async for chunk in run_agent(user_msg, key):
-        history[-1] = {"role": "assistant", "content": chunk}
+        history[-1][1] = chunk
         yield history
 
 
 with gr.Blocks(title="AI Startup Idea Validator") as demo:
-    gr.Markdown("# 🚀 AI Startup Idea Validator")
+    gr.Markdown("# AI Startup Idea Validator")
     gr.Markdown(
         "**Test your startup/business idea with AI.** Enter your Google AI "
         "Studio API key below, then describe your idea. The AI will find "
         "competitors, point out their weaknesses, and suggest a unique value "
         "proposition to help you compete.\n\n"
-        "⏱️ Full analysis takes 3–8 minutes (6 AI agents run sequentially)."
+        "Full analysis takes 3-8 minutes (6 AI agents run sequentially)."
     )
 
     api_key = gr.Textbox(
-        label="🔑 Google AI Studio API Key (required)",
+        label="Google AI Studio API Key (required)",
         placeholder="Paste your API key here (get one free at aistudio.google.com/app/apikey)",
         type="password",
     )
 
-    chatbot = gr.Chatbot(type="messages", height=500, label="Startup Validator")
+    chatbot = gr.Chatbot(height=500, label="Startup Validator")
     msg = gr.Textbox(
         label="Your startup idea",
         placeholder="e.g. I want to build an AI-powered resume builder for fresh graduates...",
