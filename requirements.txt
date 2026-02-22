@@ -1,11 +1,6 @@
-# Event Collaboration Intelligence - ADK Dependencies
 google-adk>=1.20.0
 google-genai>=1.53.0
-googlemaps>=4.10.0
 pydantic>=2.10.0
 python-dotenv>=1.0.0
-
-# Data processing and analysis
-pandas>=2.2.0
-numpy>=1.26.0
-scikit-learn>=1.4.0
+gradio>=4.0.0
+tenacity>=8.0.0
