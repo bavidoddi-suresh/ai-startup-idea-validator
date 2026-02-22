@@ -7,6 +7,7 @@ Users provide their own Google AI Studio API key to run the analysis.
 
 import os
 import logging
+import traceback
 
 import gradio as gr
 
@@ -24,9 +25,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("GradioApp")
 
 
-async def respond(message: str, history: list, api_key: str):
-    """Process user message through the ADK agent pipeline."""
-
+async def run_agent(message: str, api_key: str):
+    """Run the ADK agent pipeline and yield text chunks."""
     if not api_key or not api_key.strip():
         yield (
             "⚠️ **Please enter your Google AI Studio API key** in the "
@@ -81,6 +81,8 @@ async def respond(message: str, history: list, api_key: str):
 
     except Exception as e:
         error_msg = str(e)
+        logger.error(f"Agent error: {error_msg}")
+        logger.error(traceback.format_exc())
         if "api_key" in error_msg.lower() or "missing key" in error_msg.lower():
             yield (
                 full_response
@@ -94,7 +96,30 @@ async def respond(message: str, history: list, api_key: str):
         yield "✅ Pipeline completed."
 
 
-with gr.Blocks(theme=gr.themes.Soft(), title="AI Startup Idea Validator") as demo:
+def add_user_message(message, history):
+    """Add the user's message to chat history and clear the input box."""
+    if not message or not message.strip():
+        return "", history
+    history = history + [{"role": "user", "content": message}]
+    return "", history
+
+
+async def generate_response(history, key):
+    """Stream the bot's response into the chat."""
+    if not history:
+        yield history
+        return
+
+    user_msg = history[-1]["content"]
+    history = history + [{"role": "assistant", "content": "⏳ Starting analysis..."}]
+    yield history
+
+    async for chunk in run_agent(user_msg, key):
+        history[-1] = {"role": "assistant", "content": chunk}
+        yield history
+
+
+with gr.Blocks(title="AI Startup Idea Validator") as demo:
     gr.Markdown("# 🚀 AI Startup Idea Validator")
     gr.Markdown(
         "**Test your startup/business idea with AI.** Enter your Google AI "
@@ -110,7 +135,7 @@ with gr.Blocks(theme=gr.themes.Soft(), title="AI Startup Idea Validator") as dem
         type="password",
     )
 
-    chatbot = gr.Chatbot(height=500, label="Startup Validator")
+    chatbot = gr.Chatbot(type="messages", height=500, label="Startup Validator")
     msg = gr.Textbox(
         label="Your startup idea",
         placeholder="e.g. I want to build an AI-powered resume builder for fresh graduates...",
@@ -131,25 +156,14 @@ with gr.Blocks(theme=gr.themes.Soft(), title="AI Startup Idea Validator") as dem
         inputs=msg,
     )
 
-    async def user_message(message, history):
-        """Add user message to chat and clear input."""
-        return "", history + [{"role": "user", "content": message}]
+    msg.submit(
+        add_user_message, [msg, chatbot], [msg, chatbot], queue=False
+    ).then(generate_response, [chatbot, api_key], chatbot)
 
-    async def bot_response(history, key):
-        """Generate bot response via the ADK pipeline."""
-        user_msg = history[-1]["content"]
-        history.append({"role": "assistant", "content": ""})
+    submit_btn.click(
+        add_user_message, [msg, chatbot], [msg, chatbot], queue=False
+    ).then(generate_response, [chatbot, api_key], chatbot)
 
-        async for chunk in respond(user_msg, history, key):
-            history[-1]["content"] = chunk
-            yield history
-
-    msg.submit(user_message, [msg, chatbot], [msg, chatbot], queue=False).then(
-        bot_response, [chatbot, api_key], chatbot
-    )
-    submit_btn.click(user_message, [msg, chatbot], [msg, chatbot], queue=False).then(
-        bot_response, [chatbot, api_key], chatbot
-    )
 
 if __name__ == "__main__":
     demo.queue()
