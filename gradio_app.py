@@ -94,36 +94,65 @@ async def respond(message: str, history: list, api_key: str):
         yield "✅ Pipeline completed."
 
 
-demo = gr.ChatInterface(
-    fn=respond,
-    title="🚀 AI Startup Idea Validator",
-    description=(
-        "**Test your startup/business idea with AI.**\n\n"
-        "Enter your Google AI Studio API key below, then describe your idea. "
-        "The AI will find competitors, point out their weaknesses, and suggest "
-        "a unique value proposition to help you compete.\n\n"
+with gr.Blocks(theme=gr.themes.Soft(), title="AI Startup Idea Validator") as demo:
+    gr.Markdown("# 🚀 AI Startup Idea Validator")
+    gr.Markdown(
+        "**Test your startup/business idea with AI.** Enter your Google AI "
+        "Studio API key below, then describe your idea. The AI will find "
+        "competitors, point out their weaknesses, and suggest a unique value "
+        "proposition to help you compete.\n\n"
         "⏱️ Full analysis takes 3–8 minutes (6 AI agents run sequentially)."
-    ),
-    additional_inputs=[
-        gr.Textbox(
-            label="🔑 Google AI Studio API Key (required)",
-            placeholder="Paste your API key here (get one free at aistudio.google.com/app/apikey)",
-            type="password",
-        ),
-    ],
-    additional_inputs_accordion=gr.Accordion(label="🔐 API Key", open=True),
-    examples=[
-        ["I want to build an AI-powered resume builder for fresh graduates who struggle with ATS systems"],
-        ["A hyperlocal grocery delivery app for tier-2 cities in India"],
-        ["An app connecting patients with dietitians for personalized meal plans"],
-        ["A micro-investment platform for college students to invest spare change"],
-        ["A project management tool specifically for freelancers and solopreneurs"],
-    ],
-    theme=gr.themes.Soft(),
-    concurrency_limit=2,
-)
+    )
+
+    api_key = gr.Textbox(
+        label="🔑 Google AI Studio API Key (required)",
+        placeholder="Paste your API key here (get one free at aistudio.google.com/app/apikey)",
+        type="password",
+    )
+
+    chatbot = gr.Chatbot(height=500, label="Startup Validator")
+    msg = gr.Textbox(
+        label="Your startup idea",
+        placeholder="e.g. I want to build an AI-powered resume builder for fresh graduates...",
+    )
+
+    with gr.Row():
+        submit_btn = gr.Button("Analyze", variant="primary")
+        clear_btn = gr.ClearButton([msg, chatbot], value="Clear")
+
+    gr.Examples(
+        examples=[
+            "I want to build an AI-powered resume builder for fresh graduates who struggle with ATS systems",
+            "A hyperlocal grocery delivery app for tier-2 cities in India",
+            "An app connecting patients with dietitians for personalized meal plans",
+            "A micro-investment platform for college students to invest spare change",
+            "A project management tool specifically for freelancers and solopreneurs",
+        ],
+        inputs=msg,
+    )
+
+    async def user_message(message, history):
+        """Add user message to chat and clear input."""
+        return "", history + [{"role": "user", "content": message}]
+
+    async def bot_response(history, key):
+        """Generate bot response via the ADK pipeline."""
+        user_msg = history[-1]["content"]
+        history.append({"role": "assistant", "content": ""})
+
+        async for chunk in respond(user_msg, history, key):
+            history[-1]["content"] = chunk
+            yield history
+
+    msg.submit(user_message, [msg, chatbot], [msg, chatbot], queue=False).then(
+        bot_response, [chatbot, api_key], chatbot
+    )
+    submit_btn.click(user_message, [msg, chatbot], [msg, chatbot], queue=False).then(
+        bot_response, [chatbot, api_key], chatbot
+    )
 
 if __name__ == "__main__":
+    demo.queue()
     demo.launch(
         server_name="0.0.0.0",
         server_port=7860,
